@@ -55,7 +55,7 @@ class BiLSTM_CRF(object):
 
     def build_graph(self):
         """
-
+        创建计算图
         :return:
         """
         # set place holder
@@ -118,7 +118,7 @@ class BiLSTM_CRF(object):
         if self.CRF:
             # CRF out layer
             with tf.variable_scope('crf_loss'):
-                log_likelihood, self.trans = crf_log_likelihood(inputs=self.logits,tag_indices=self.labels,\
+                log_likelihood, self.transition_params = crf_log_likelihood(inputs=self.logits,tag_indices=self.labels,\
                                                                 sequence_lengths=self.sequence_lengths)
                 self.loss = -tf.reduce_mean(log_likelihood)
         else:
@@ -167,6 +167,29 @@ class BiLSTM_CRF(object):
         self.merged = tf.summary.merge_all()
         self.file_writer = tf.summary.FileWriter(self.summary_path, sess.graph)
 
+    def build_feed_dict(self, sentence_list, labels_list=None, lr=None, drop_out=None):
+        """
+        创建训练中的feed_dict
+        fill place_holder
+        :param sentence_list: [[id,id...],]
+        :param labels_list:
+        :param lr: learning rate
+        :param drop_out:
+        :return:feed_dict
+        """
+        feed_dict = dict()
+        _sentence_list, sentence_len_list = pad_sequences(sentence_list, pad_mark=0)
+        feed_dict[self.word_ids] = _sentence_list
+        feed_dict[self.sequence_lengths] = sentence_len_list
+        if labels_list:
+            _labels_list, _ = pad_sequences(labels_list, pad_mark=0)
+            feed_dict[self.labels] = _labels_list
+        if lr:
+            feed_dict[self.lr_pl] = lr
+        if drop_out:
+            feed_dict[self.dropout_pl] = drop_out
+        return feed_dict
+
     def train(self, train_data):
         """
         训练主函数
@@ -206,32 +229,51 @@ class BiLSTM_CRF(object):
                     if step + 1 == num_batches:
                         saver.save(sess, self.model_path, global_step=global_step)
 
-    def build_feed_dict(self, sentence_list, labels_list=None, lr=None, drop_out=None):
+    def _prediction_one_batch(self, sess, sentence_list):
         """
-        创建训练中的feed_dict
-        fill place_holder
-        :param sentence_list: [[id,id...],]
-        :param labels_list:
-        :param lr: learning rate
-        :param drop_out:
-        :return:feed_dict
+        在计算图中跑一个batch,得到标签列表
+        :param sess:
+        :param sentence_list: [[],[]]
+        :return: label_list [[],[]]
         """
-        feed_dict = dict()
-        _sentence_list, sentence_len_list = pad_sequences(sentence_list, pad_mark=0)
-        feed_dict[self.word_ids] = _sentence_list
-        feed_dict[self.sequence_lengths] = sentence_len_list
-        if labels_list:
-            _labels_list, _ = pad_sequences(labels_list, pad_mark=0)
-            feed_dict[self.labels] = _labels_list
-        if lr:
-            feed_dict[self.lr_pl] = lr
-        if drop_out:
-            feed_dict[self.dropout_pl] = drop_out
-        return feed_dict
+        feed_dict = self.build_feed_dict(sentence_list, drop_out=1.0)
+        seq_len_list = [len(sentence) for sentence in sentence_list]
+        if self.CRF:
+            logits, transition_params = sess.run([self.logits, self.transition_params],
+                                                 feed_dict=feed_dict)
+            label_list = []
+            for logit, seq_len in zip(logits, seq_len_list):
+                viterbi_seq, _ = viterbi_decode(logit[:seq_len], transition_params)
+                label_list.append(viterbi_seq)
+            return label_list
 
-    def prediction(self, sentence):
-        """
+        else:
+            label_list = sess.run(self.labels_softmax_, feed_dict=feed_dict)
+            return label_list
 
-        :param sentence:
+    def prediction(self, sess, demo_data):
+        """
+        预测demo_data的标签
+        :param sess: tf.sess
+        :param demo_data:[([seg,seg],[label, label]),...] /[(seg_list, label_list)]
+        :return:tag_list 标签列表
+        """
+        # feed_dict = self.build_feed_dict(demo_data, drop_out=1.0)
+        label_list = list()
+        for sentence_list, labels_list in generate_batch(demo_data, self.batch_size, self.vocab,\
+                                               self.tag2label, shuffle=self.shuffle):
+            _labels = self._prediction_one_batch(sess, sentence_list)
+            labels_list.append(_labels)
+        label2tag = dict()
+        for tag, label in self.tag2label.items():
+            label2tag[label] = tag if label != 0 else label
+        tag_list = [label2tag[label] for label in label_list[0]]
+        return tag_list
+
+    def evaluate(self, sess, eval_data):
+        """
+        
+        :param sess:
+        :param eval_data:
         :return:
         """
