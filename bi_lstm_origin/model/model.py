@@ -8,7 +8,8 @@
 @ file: model.py
 @ time: $18-9-29 下午2:43
 """
-
+import sys
+sys.path.append('..')
 import math
 import time
 import tensorflow as tf
