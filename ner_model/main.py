@@ -11,6 +11,8 @@
 
 import tensorflow as tf
 import os
+from tool.util import load_sentence_file
+from tool.logger import logger
 
 
 flags = tf.app.flags
@@ -42,18 +44,64 @@ flags.DEFINE_string("vocab_file",   "vocab.json",   "File for vocab")
 flags.DEFINE_string("config_file",  "config_file",  "File for config")
 flags.DEFINE_string("script",       "conlleval",    "evaluation script")
 flags.DEFINE_string("result_path",  "result",       "Path for results")
-flags.DEFINE_string("emb_file",     os.path.join("data", "vec.txt"),  "Path for pre_trained embedding")
-flags.DEFINE_string("train_file",   os.path.join("data", "example.train"),  "Path for train data")
-flags.DEFINE_string("dev_file",     os.path.join("data", "example.dev"),    "Path for dev data")
-flags.DEFINE_string("test_file",    os.path.join("data", "example.test"),   "Path for test data")
+flags.DEFINE_string("emb_file_name",     "vec.txt",  "pre_trained embedding file name")
+flags.DEFINE_string("train_file_name",   "example.train",  "train data file name")
+flags.DEFINE_string("dev_file_name",     "example.dev",    "dev data file name")
+flags.DEFINE_string("test_file_name",    "example.test",   "test data file name")
+
 
 flags.DEFINE_string("model_type", "idcnn", "Model type, can be idcnn or bilstm")
+FLAGS = tf.app.flags.FLAGS
 
+# build file path
+flags.DEFINE_string("emb_file",     os.path.join("data", FLAGS.emb_file_name),  "Path for pre_trained embedding")
+flags.DEFINE_string("train_file",   os.path.join("data", FLAGS.train_file_name),  "Path for train data")
+flags.DEFINE_string("dev_file",     os.path.join("data", FLAGS.dev_file_name),    "Path for dev data")
+flags.DEFINE_string("test_file",    os.path.join("data", FLAGS.test_file_name),   "Path for test data")
 
 def build_config(char_to_id, tag_to_id):
     """
     建立graph中需求的config字典
     :param char_to_id: 字符转向id的字典
     :param tag_to_id: 标签转向id的字典
+    config key
+    model_type: 模型使用方法 idcnn/bilstm
+    num_chars: 字符字典的长度
+    char_dim: embedding 层转换后的字符向量维度
+    num_tags: 标签字典的长度
+    seg_dim: embedding 层转换后的分词情况向量维度
     :return:
     """
+    config = dict()
+    config["model_type"] = FLAGS.model_type
+    config["num_chars"] = len(char_to_id)
+    config["char_dim"] = FLAGS.char_dim
+    config["num_tags"] = len(tag_to_id)
+    config["seg_dim"] = FLAGS.seg_dim
+    config["lstm_dim"] = FLAGS.lstm_dim
+    config["batch_size"] = FLAGS.batch_size
+
+    config["emb_file"] = FLAGS.emb_file
+    config["clip"] = FLAGS.clip
+    config["dropout_keep"] = 1.0 - FLAGS.dropout
+    config["optimizer"] = FLAGS.optimizer
+    config["lr"] = FLAGS.lr
+    config["tag_schema"] = FLAGS.tag_schema
+    config["pre_emb"] = FLAGS.pre_emb
+    config["zeros"] = FLAGS.zeros
+    config["lower"] = FLAGS.lower
+    return config
+
+def string_pre_process_for_train():
+    """
+    将文本转换为模型输入的前处理流程
+
+    :return:
+    """
+    try:
+        train_sentences = load_sentence_file(FLAGS.train_file, FLAGS.zeros)
+        dev_sentences = load_sentence_file(FLAGS.dev_file, FLAGS.zeros)
+        test_sentences = load_sentence_file(FLAGS.test_file, FLAGS.zeros)
+    except Exception, e:
+        logger.error('pre-process for train string failed for %s' % str(e))
+
