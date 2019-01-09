@@ -11,6 +11,12 @@
 import sys
 from logger import logger
 import re
+# use jieba as seg cut model first
+import jieba
+import math
+import random
+import os
+import json
 
 
 ######################
@@ -122,13 +128,64 @@ def prepare_model_data(sentences, char_to_id, tag_to_id, lower=False, train=True
              seg_id_list example: [X/XX/XXX/XXXX] -> [0 /1 3 /1 2 3 /1 2 2 3]
     """
     try:
+        def lower(char):
+            return char.lower() if lower else char
         no_train_tag_index = tag_to_id['O']
+        model_data = list()
         for sentence in sentences:
             char_list = [item[0] for item in sentence]
+            char_id_list = [char_to_id[lower(char) if lower(char) else "<UNK>"] for char in char_list]
+            sentence_string = "".join(char_list)
+            seg_id_list = get_seg_feature(sentence_string)
+            tags = [item[-1] for item in sentence]
+            if train:
+                tag_id_list = [tag_to_id[tag] for tag in tags]
+            else:
+                tag_id_list = [no_train_tag_index] * len(tags)
+            # append setence data
+            model_data.append([char_list, char_id_list, seg_id_list, tag_id_list])
+        return model_data
     except Exception, e:
         logger.error('prepare model data failed for %s' % str(e))
         return None
 
+class BatchManager(object):
+    """
+    将处理后的data转化为batch iter的复用类
+    """
+    def __init__(self, data, batch_size):
+        self.batch_data = self.sort_and_pad(data, batch_size)
+        self.len_data = len(self.batch_data)
+
+    def sort_and_pad(self, data, batch_size):
+        num_batch = int(math.ceil(len(data) / batch_size))
+        sorted_data = sorted(data, key=lambda x: len(x[0]))
+        batch_data = list()
+        for i in range(num_batch):
+            batch_data.append(self.pad_data(sorted_data[i * batch_size: (i + 1) * batch_size]))
+        return batch_data
+
+    @staticmethod
+    def pad_data(data):
+        strings = []
+        chars = []
+        segs = []
+        targets = []
+        max_length = max([len(sentence[0]) for sentence in data])
+        for line in data:
+            string, char, seg, target = line
+            padding = [0] * (max_length - len(string))
+            strings.append(string + padding)
+            chars.append(char + padding)
+            segs.append(seg + padding)
+            targets.append(target + padding)
+        return [strings, chars, segs, targets]
+
+    def iter_batch(self, shuffle=False):
+        if shuffle:
+            random.shuffle(self.batch_data)
+        for idx in range(self.len_data):
+            yield self.batch_data[idx]
 
 ######################
 ##  tool funtion
@@ -214,3 +271,56 @@ def create_mapping(count_dic):
     id_to_item = {index: item for index, item in enumerate(sorted_items)}
     item_to_id = {item: index for index, item in id_to_item.items()}
     return id_to_item, item_to_id
+
+
+def get_seg_feature(str):
+    """
+    对字符串分词后转换为分词id
+    :param str:
+    :return:
+    """
+    seg_id_list = list()
+    for seg in jieba.cut(str):
+        if len(seg) == 1:
+            seg_id_list.append(0)
+        else:
+            seg_id = [2] * len(seg)
+            seg_id[0] = 1
+            seg_id[-1] = 3
+            seg_id_list.extend(seg_id)
+    return seg_id_list
+
+
+def make_path(FLAGS):
+    """
+    建立file_path
+    :param FLAGS: tensorflow FLAGS
+    :return:
+    """
+    if not os.path.isdir(FLAGS.result_path):
+        os.makedirs(FLAGS.result_path)
+    if not os.path.isdir(FLAGS.ckpt_path):
+        os.makedirs(FLAGS.ckpt_path)
+    # represent with logger
+    # if not os.path.isdir("log"):
+    #     os.makedirs("log")
+
+
+def save_config(config, config_file):
+    """
+    Save configuration of the model
+    parameters are stored in json format
+    """
+    with open(config_file, "w") as f:
+        json.dump(config, f, ensure_ascii=False, indent=4)
+
+
+def load_config(config_file):
+    """
+    Load configuration of the model
+    parameters are stored in json format
+    """
+    with open(config_file, 'rb') as f:
+        return json.loads(f.read())
+
+

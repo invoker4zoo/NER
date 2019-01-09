@@ -93,7 +93,7 @@ def build_config(char_to_id, tag_to_id):
     config["lower"] = FLAGS.lower
     return config
 
-def string_pre_process_for_train():
+def preprocess_for_data():
     """
     将文本转换为模型输入的前处理流程
 
@@ -118,13 +118,45 @@ def string_pre_process_for_train():
                 # notice pickle file format with py2 and py3
                 pickle.dump([char_to_id, id_to_char, tag_to_id, id_to_tag], f)
         else:
-            logger.info('loading mapping file')
-            with open(FLAGS.map_file, 'rb') as f:
-                char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+            pass
+            # logger.info('loading mapping file')
+            # with open(FLAGS.map_file, 'rb') as f:
+            #     char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
 
-        # prepare model data
-
+        # prepare model data set
+        # format data  --- [[char_list, char_id_list, seg_id_list, tags_id_list],[]]
+        #     seg_id_list example: [X/XX/XXX/XXXX] -> [0 /1 3 /1 2 3 /1 2 2 3]
+        train_data = prepare_model_data(train_sentences, char_to_id, tag_to_id, FLAGS.lower)
+        dev_data = prepare_model_data(dev_sentences, char_to_id, tag_to_id, FLAGS.lower)
+        test_data = prepare_model_data(test_sentences, char_to_id, tag_to_id, FLAGS.lower)
+        train_manager = BatchManager(train_data, FLAGS.batch_size)
+        dev_manager = BatchManager(dev_data, 100)
+        test_manager = BatchManager(test_data, 100)
+        return train_manager, dev_manager, test_manager
 
     except Exception, e:
         logger.error('pre-process for train string failed for %s' % str(e))
 
+
+def train():
+    """
+    训练模块
+    :return:
+    """
+    try:
+        # limit GPU memory
+        tf_config = tf.ConfigProto()
+        tf_config.gpu_options.allow_growth = True
+
+        train_manager, dev_manager, test_manager = preprocess_for_data()
+        logger.info('loading mapping file')
+        with open(FLAGS.map_file, 'rb') as f:
+            char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+        make_path(FLAGS)
+        if os.path.isfile(FLAGS.config_file):
+            config = load_config(FLAGS.config_file)
+        else:
+            config = build_config(char_to_id, tag_to_id)
+            save_config(config, FLAGS.config_file)
+    except Exception, e:
+        logger.error('training model process failed for %s' % str(e))
