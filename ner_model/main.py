@@ -14,11 +14,12 @@ import os
 from tool.util import *
 from tool.logger import logger
 import pickle
+from model import NER_MODEL
 
 
 flags = tf.app.flags
 flags.DEFINE_boolean("clean",       False,      "clean train folder")
-flags.DEFINE_boolean("train",       False,      "Whether train the model")
+flags.DEFINE_boolean("train",       True,      "Whether train the model")
 # configurations for the model
 flags.DEFINE_integer("seg_dim",     20,         "Embedding size for segmentation, 0 if not used")
 flags.DEFINE_integer("char_dim",    100,        "Embedding size for characters")
@@ -51,7 +52,7 @@ flags.DEFINE_string("dev_file",     "data/example.dev",    "dev data file")
 flags.DEFINE_string("test_file",    "data/example.test",   "test data file")
 
 
-flags.DEFINE_string("model_type", "idcnn", "Model type, can be idcnn or bilstm")
+flags.DEFINE_string("model_type", "bilstm", "Model type, can be idcnn or bilstm")
 FLAGS = tf.app.flags.FLAGS
 
 # # build file path
@@ -119,9 +120,9 @@ def preprocess_for_data():
                 pickle.dump([char_to_id, id_to_char, tag_to_id, id_to_tag], f)
         else:
             pass
-            # logger.info('loading mapping file')
-            # with open(FLAGS.map_file, 'rb') as f:
-            #     char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+            logger.info('loading mapping file')
+            with open(FLAGS.map_file, 'rb') as f:
+                char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
 
         # prepare model data set
         # format data  --- [[char_list, char_id_list, seg_id_list, tags_id_list],[]]
@@ -158,5 +159,70 @@ def train():
         else:
             config = build_config(char_to_id, tag_to_id)
             save_config(config, FLAGS.config_file)
+        #
+        steps_per_epoch = train_manager.len_data
+        with tf.Session(config=tf_config) as sess:
+            model = initial_ner_model(sess, NER_MODEL, FLAGS.ckpt_path, load_word2vec, config, id_to_char)
+            logger.info("start training NER model")
+            loss = []
+            # epoch iterate
+            for i in range(FLAGS.max_epoch):
+                for batch in train_manager.iter_batch(shuffle=True):
+                    step, batch_loss = model.run_step(sess, True, batch)
+                    loss.append(batch_loss)
+                    if step % FLAGS.steps_check == 0:
+                        iteration = step // steps_per_epoch + 1
+                        logger.info("iteration:{} step:{}/{}, "
+                                    "NER loss:{:>9.6f}".format(
+                            iteration, step % steps_per_epoch, steps_per_epoch, np.mean(loss)))
+                        loss = []
+                save_model(sess, model, FLAGS.ckpt_path)
+                # evaluate result for stop epoch iter
+                # best = evaluate(sess, model, "dev", dev_manager, id_to_tag, logger)
+                # if best:
+                #     save_model(sess, model, FLAGS.ckpt_path, logger)
+                # evaluate(sess, model, "test", test_manager, id_to_tag, logger)
     except Exception, e:
         logger.error('training model process failed for %s' % str(e))
+
+
+def evaluate_line():
+    config = load_config(FLAGS.config_file)
+    # limit GPU memory
+    # initial GPU config
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    with open(FLAGS.map_file, "rb") as f:
+        char_to_id, id_to_char, tag_to_id, id_to_tag = pickle.load(f)
+    with tf.Session(config=tf_config) as sess:
+        model = initial_ner_model(sess, NER_MODEL, FLAGS.ckpt_path, load_word2vec, config, id_to_char, False)
+
+        # while True:
+        #     # try:
+        #     #     line = input("请输入测试句子:")
+        #     #     result = model.evaluate_line(sess, input_from_line(line, char_to_id), id_to_tag)
+        #     #     print(result)
+        #     # except Exception as e:
+        #     #     logger.info(e)
+        #
+        #         line = input("请输入测试句子:")
+        #         result = model.evaluate_line(sess, input_from_line(line, char_to_id), id_to_tag)
+        #         print(result)
+        line = u"香港的房价已经到达历史巅峰,乌溪沙地铁站上盖由新鸿基地产公司开发的银湖天峰,现在的尺价已经超过一万五千港币。"
+        line = u"这是测试语句，国务院加入测试,财政部会计司也加入测试，新疆建设兵团，看看江泽民的测试结果"
+        result = model.evaluate_line(sess, prepare_line_data(line, char_to_id), id_to_tag)
+        print(result)
+
+
+def main(_):
+
+    if FLAGS.train:
+        # if FLAGS.clean:
+        #     clean(FLAGS)
+        train()
+    else:
+        evaluate_line()
+
+
+if __name__ == "__main__":
+    tf.app.run(main)

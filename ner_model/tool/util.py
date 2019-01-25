@@ -17,6 +17,8 @@ import math
 import random
 import os
 import json
+import tensorflow as tf
+import numpy as np
 
 
 ######################
@@ -149,6 +151,25 @@ def prepare_model_data(sentences, char_to_id, tag_to_id, lower=False, train=True
         logger.error('prepare model data failed for %s' % str(e))
         return None
 
+
+def prepare_line_data(line, char_to_id):
+    """
+    trans input line to model evaluate data
+    :param line:
+    :param char_to_id:
+    :return:
+    """
+    inputs = list()
+    inputs.append([line])
+    line.replace(" ", "$")
+    inputs.append([[char_to_id[char] if char in char_to_id else char_to_id["<UNK>"]
+                   for char in line]])
+    inputs.append([get_seg_feature(line)])
+    inputs.append([[]])
+    return inputs
+
+
+
 class BatchManager(object):
     """
     将处理后的data转化为batch iter的复用类
@@ -187,6 +208,95 @@ class BatchManager(object):
         for idx in range(self.len_data):
             yield self.batch_data[idx]
 
+
+def initial_ner_model(session, Model_class, path, load_vec, config, id_to_char, is_train=True):
+    """
+    initial ner model ,check checkpoint/pre_emb, load checkpoint or rewrite char_lookup with pre_emb file
+    pre_emb size should same with char_dim
+    :param session:
+    :param Model_class:
+    :param path:
+    :param load_vec:
+    :param config:
+    :param id_to_char:
+    :param logger:
+    :param is_train:
+    :return:
+    """
+    model = Model_class(config, is_train)
+
+    ckpt = tf.train.get_checkpoint_state(path)
+    if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+        logger.info("Reading model parameters from %s" % ckpt.model_checkpoint_path)
+        model.saver.restore(session, ckpt.model_checkpoint_path)
+    else:
+        logger.info("Created model with fresh parameters.")
+        session.run(tf.global_variables_initializer())
+        if config["pre_emb"]:
+            emb_weights = session.run(model.char_lookup.read_value())
+            emb_weights = load_vec(config["emb_file"], id_to_char, config["char_dim"], emb_weights)
+            session.run(model.char_lookup.assign(emb_weights))
+            logger.info("Load pre-trained embedding.")
+    return model
+
+
+def load_word2vec(emb_path, id_to_word, word_dim, old_weights):
+    """
+    Load word embedding from pre-trained file
+    embedding size must match
+    """
+    new_weights = old_weights
+    print('Loading pretrained embeddings from {}...'.format(emb_path))
+    pre_trained = {}
+    emb_invalid = 0
+    with open(emb_path, 'r') as f:
+        lines = f.readlines()
+    for i, line in enumerate(lines):
+        line = line.rstrip().split()
+        if len(line) == word_dim + 1:
+            pre_trained[line[0]] = np.array(
+                [float(x) for x in line[1:]]
+            ).astype(np.float32)
+        else:
+            emb_invalid += 1
+    if emb_invalid > 0:
+        print('WARNING: %i invalid lines' % emb_invalid)
+    c_found = 0
+    c_lower = 0
+    c_zeros = 0
+    n_words = len(id_to_word)
+    # Lookup table initialization
+    for i in range(n_words):
+        word = id_to_word[i]
+        if word in pre_trained:
+            new_weights[i] = pre_trained[word]
+            c_found += 1
+        elif word.lower() in pre_trained:
+            new_weights[i] = pre_trained[word.lower()]
+            c_lower += 1
+        elif re.sub('\d', '0', word.lower()) in pre_trained:
+            new_weights[i] = pre_trained[
+                re.sub('\d', '0', word.lower())
+            ]
+            c_zeros += 1
+    print('Loaded %i pretrained embeddings.' % len(pre_trained))
+    print('%i / %i (%.4f%%) words have been initialized with '
+          'pretrained embeddings.' % (
+        c_found + c_lower + c_zeros, n_words,
+        100. * (c_found + c_lower + c_zeros) / n_words)
+    )
+    print('%i found directly, %i after lowercasing, '
+          '%i after lowercasing + zero.' % (
+        c_found, c_lower, c_zeros
+    ))
+    return new_weights
+
+def save_model(sess, model, path):
+    checkpoint_path = os.path.join(path, "ner.ckpt")
+    model.saver.save(sess, checkpoint_path)
+    logger.info("model saved")
+
+
 ######################
 ##  tool funtion
 def trans_num_to_zero(str):
@@ -196,6 +306,7 @@ def trans_num_to_zero(str):
     :return:
     """
     return re.sub('\d', '0', str)
+
 
 def check_tag_schema(tags):
     """
@@ -322,5 +433,35 @@ def load_config(config_file):
     """
     with open(config_file, 'rb') as f:
         return json.loads(f.read())
+
+
+def result_to_json(string, tags):
+    """
+    trans evaluate result to json format
+    :param string:
+    :param tags:
+    :return:
+    """
+    item = {"string": string, "entities": []}
+    entity_name = ""
+    entity_start = 0
+    idx = 0
+    for char, tag in zip(string, tags):
+        if tag[0] == "S":
+            item["entities"].append({"word": char, "start": idx, "end": idx+1, "type":tag[2:]})
+        elif tag[0] == "B":
+            entity_name += char
+            entity_start = idx
+        elif tag[0] == "I":
+            entity_name += char
+        elif tag[0] == "E":
+            entity_name += char
+            item["entities"].append({"word": entity_name, "start": entity_start, "end": idx + 1, "type": tag[2:]})
+            entity_name = ""
+        else:
+            entity_name = ""
+            entity_start = idx
+        idx += 1
+    return item
 
 

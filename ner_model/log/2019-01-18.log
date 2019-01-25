@@ -1,0 +1,2 @@
+[2019-01-18 11:35:54,592]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-18 11:35:54,593]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt

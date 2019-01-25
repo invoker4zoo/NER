@@ -1,0 +1,25 @@
+[2019-01-25 16:50:19,827]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 16:50:19,828]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 17:01:23,698]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 17:01:23,699]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 17:03:38,721]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 17:03:40,412]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:14:29,183]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:17:25,454]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:34:01,941]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:34:01,942]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:52:19,330]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:52:19,331]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:58:03,850]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:58:03,851]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:58:28,574]- util.py[line:230] INFO Reading model parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:58:28,575]- tf_logging.py[line:115] INFO Restoring parameters from ckpt_biLSTM/ner.ckpt
+[2019-01-25 18:59:45,329]- main.py[line:139] ERROR pre-process for train string failed for local variable 'char_to_id' referenced before assignment
+[2019-01-25 18:59:45,461]- main.py[line:186] ERROR training model process failed for 'NoneType' object is not iterable
+[2019-01-25 19:01:11,617]- main.py[line:123] INFO loading mapping file
+[2019-01-25 19:01:11,636]- util.py[line:151] ERROR prepare model data failed for '\xe6\xb5\xb7'
+[2019-01-25 19:01:11,636]- util.py[line:151] ERROR prepare model data failed for '\xe5\x9c\xa8'
+[2019-01-25 19:01:11,636]- util.py[line:151] ERROR prepare model data failed for '\xe6\x88\x91'
+[2019-01-25 19:01:11,636]- main.py[line:139] ERROR pre-process for train string failed for object of type 'NoneType' has no len()
+[2019-01-25 19:01:11,777]- main.py[line:186] ERROR training model process failed for 'NoneType' object is not iterable
+[2019-01-25 19:02:19,122]- main.py[line:123] INFO loading mapping file
