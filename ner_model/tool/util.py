@@ -39,6 +39,11 @@ def load_sentence_file(path, zeros, lower=False):
         with open(path, 'rb') as f:
             lines = f.readlines()
         for index, line in enumerate(lines):
+            # for python 2 unicode
+            try:
+                line = line.decode('utf-8')
+            except:
+                pass
             line = trans_num_to_zero(line.rstrip()) if zeros else line.rstrip()
             line = line.lower() if lower else line
             if line:
@@ -136,7 +141,7 @@ def prepare_model_data(sentences, char_to_id, tag_to_id, lower=False, train=True
         model_data = list()
         for sentence in sentences:
             char_list = [item[0] for item in sentence]
-            char_id_list = [char_to_id[lower(char) if lower(char) else "<UNK>"] for char in char_list]
+            char_id_list = [char_to_id[lower(char) if lower(char) in char_to_id.keys() else "<UNK>"] for char in char_list]
             sentence_string = "".join(char_list)
             seg_id_list = get_seg_feature(sentence_string)
             tags = [item[-1] for item in sentence]
@@ -252,6 +257,11 @@ def load_word2vec(emb_path, id_to_word, word_dim, old_weights):
     with open(emb_path, 'r') as f:
         lines = f.readlines()
     for i, line in enumerate(lines):
+        # for python 2 unicode
+        try:
+            line = line.decode('utf-8')
+        except:
+            pass
         line = line.rstrip().split()
         if len(line) == word_dim + 1:
             pre_trained[line[0]] = np.array(
